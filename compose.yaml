@@ -91,6 +91,25 @@ services:
     networks:
       - arka-network
 
+  kafka-init:
+    image: confluentinc/cp-kafka:8.0.4
+    container_name: arka-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order-created --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic stock-reserved --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic stock-released --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic payment-failed --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order-confirmed --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order-cancelled --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic stock-failed --partitions 3 --replication-factor 1
+      "
+    networks:
+      - arka-network
+
   # ═══════════════════════════════════════════════════
   # KafkaUI — Visualización de mensajes en Kafka
   # ═══════════════════════════════════════════════════
@@ -114,10 +133,16 @@ services:
     image: localstack/localstack:latest
     container_name: arka-localstack
     ports:
-      - "${LOCALSTACK_PORT}:${LOCALSTACK_PORT}"
+      # - "${LOCALSTACK_PORT}:${LOCALSTACK_PORT}"
+      - "4566:4566"           # Gateway unificado
+      - "4510-4559:4510-4559" # Rango de servicios externos
     environment:
-      - DEBUG=0
       - SERVICES=secretsmanager,apigateway,cloudformation
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DEFAULT_REGION=us-east-1
+      - CFN_IGNORE_UNSUPPORTED_RESOURCE_TYPES=1
+      - LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT=1
     env_file:
       - .env
     volumes:
@@ -153,6 +178,34 @@ services:
       - arka-network
 
   # ═══════════════════════════════════════════════════
+  # MsPayment — Simulador de Pagos
+  # ═══════════════════════════════════════════════════
+  ms-payment:
+    build:
+      context: ./ms-payment
+      dockerfile: deployment/Dockerfile
+      args:
+        - PORT=${MS_PAYMENT_PORT}
+    container_name: arka-ms-payment
+    ports:
+      - "${MS_PAYMENT_PORT}:${MS_PAYMENT_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MS_PAYMENT_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
   # MsOrders — Microservicio de Órdenes
   # ═══════════════════════════════════════════════════
   ms-orders:
@@ -164,6 +217,10 @@ services:
     container_name: arka-ms-orders
     ports:
       - "${MS_ORDERS_PORT}:${MS_ORDERS_PORT}"
+    environment:
+      - MS_PAYMENT_BASE_URL=http://${MS_PAYMENT_HOST}:${MS_PAYMENT_PORT}
+      - MS_PAYMENT_PROCESS_PATH=/api/payments/process
+      - MS_PAYMENT_TIMEOUT_SECONDS=3
     env_file:
       - .env
     depends_on:
@@ -172,6 +229,8 @@ services:
       localstack:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      ms-payment:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${MS_ORDERS_PORT}/actuator/health"]

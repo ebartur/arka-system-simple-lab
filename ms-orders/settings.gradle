@@ -21,3 +21,13 @@ project(':model').projectDir = file('./domain/model')
 project(':usecase').projectDir = file('./domain/usecase')
 include ':reactive-web'
 project(':reactive-web').projectDir = file('./infrastructure/entry-points/reactive-web')
+include ':metrics'
+project(':metrics').projectDir = file('./infrastructure/helpers/metrics')
+include ':rest-consumer'
+project(':rest-consumer').projectDir = file('./infrastructure/driven-adapters/rest-consumer')
+include ':r2dbc-postgresql'
+project(':r2dbc-postgresql').projectDir = file('./infrastructure/driven-adapters/r2dbc-postgresql')
+include ':async-event-bus'
+project(':async-event-bus').projectDir = file('./infrastructure/driven-adapters/async-event-bus')
+include ':async-event-handler'
+project(':async-event-handler').projectDir = file('./infrastructure/entry-points/async-event-handler')
