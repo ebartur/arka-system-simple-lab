@@ -161,21 +161,21 @@ services:
   # ═══════════════════════════════════════════════════
   # Traefik — Load Balancer Dinámico
   # ═══════════════════════════════════════════════════
-  traefik:
-    image: traefik:v3.6.9
-    container_name: arka-traefik
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-    ports:
-      - "80:80"      # Tráfico Web
-      - "8090:8080"  # Dashboard
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    networks:
-      - arka-network
+  # traefik:
+  #   image: traefik:v3.6.9
+  #   container_name: arka-traefik
+  #   command:
+  #     - "--api.insecure=true"
+  #     - "--providers.docker=true"
+  #     - "--providers.docker.exposedbydefault=false"
+  #     - "--entrypoints.web.address=:80"
+  #   ports:
+  #     - "80:80"      # Tráfico Web
+  #     - "8090:8080"  # Dashboard
+  #   volumes:
+  #     - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  #   networks:
+  #     - arka-network
 
   # ═══════════════════════════════════════════════════
   # MsPayment — Simulador de Pagos
@@ -234,6 +234,36 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${MS_ORDERS_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # MsInventory — Microservicio de Inventario
+  # ═══════════════════════════════════════════════════
+  ms-inventory:
+    build:
+      context: ./ms-inventory
+      dockerfile: deployment/Dockerfile
+      args:
+        - PORT=${MS_INVENTORY_PORT}
+    container_name: arka-ms-inventory
+    ports:
+      - "${MS_INVENTORY_PORT}:${MS_INVENTORY_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-inventory:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MS_INVENTORY_PORT}/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
